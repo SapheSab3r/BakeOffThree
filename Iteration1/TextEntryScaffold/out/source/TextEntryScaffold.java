@@ -227,7 +227,7 @@ int currCharIndex = -1;
         text("Phrase " + (currTrialNum+1) + " of " + totalTrialNum, textX, 50); //draw the trial count
         fill(128);
         text(" Target: " + currentPhrase, textX, 100); //draw the target string
-        text("Entered: " + currentTyped + (isEvenSecond ? "_" : ""), textX, 130); //draw what the user has entered thus far 
+        text("Entered: " + currentTyped + (isEvenSecond ? "_" : ""), textX, 115); //draw what the user has entered thus far 
 
         //draw very basic next button
         fill(255, 0, 0);
@@ -434,6 +434,7 @@ class HighlightedTextLabel {
     }
 
     public void draw() {
+        textAlign(LEFT); 
         textFont(fontSmall);
         float currX = x;
         for (int i = 0; i < strs.length; ++i) {
