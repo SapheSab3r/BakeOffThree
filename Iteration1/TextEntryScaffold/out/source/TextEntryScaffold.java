@@ -36,7 +36,7 @@ float lettersExpectedTotal = 0; //a running total of the number of letters expec
 float errorsTotal = 0; //a running total of the number of errors (when hitting next)
 String currentPhrase = ""; //the current target phrase
 String currentTyped = ""; //what the user has typed so far
-final int DPIofYourDeviceScreen = 180; //you will need to look up the DPI or PPI of your device to make sure you get the right scale!!
+final int DPIofYourDeviceScreen = 131; //you will need to look up the DPI or PPI of your device to make sure you get the right scale!!
 //http://en.wikipedia.org/wiki/List_of_displays_by_pixel_density
 
 PImage watch;
@@ -82,8 +82,9 @@ ArrayList<ArrayList<Button>> keyboardButtons = new ArrayList<ArrayList<Button>>(
 
 // keys
 
-final float keyLabelPadding = 15;
-final float keyLetterPadding = 6;
+final float keyLabelHoriPadding = 10;
+final float keyLabelVertPadding = 10;
+final float keyLetterPadding = 4;
 ArrayList<ArrayList<HighlightedTextLabel>> keyTextLabels = new ArrayList<ArrayList<HighlightedTextLabel>>();
 
 // confirm button
@@ -150,8 +151,8 @@ int currCharIndex = -1;
                 onClick
             ));
             keyTextLabelsRow.add(new HighlightedTextLabel(
-                currX + keyLabelPadding,
-                currY + keyLabelPadding,
+                currX + keyLabelHoriPadding,
+                currY + keyLabelVertPadding,
                 keyLetterPadding,
                 keyboardLayout[row][col]
             ));
@@ -180,7 +181,7 @@ int currCharIndex = -1;
         onClick);
     confirmLabel = new HighlightedTextLabel(
         confirmButtonX + 10,
-        confirmButtonY + keyLabelPadding,
+        confirmButtonY + keyLabelVertPadding,
         keyLetterPadding,
         new String[]{ "Confirm " }
     );
