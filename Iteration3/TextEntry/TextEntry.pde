@@ -22,6 +22,7 @@ PImage watch;
 // fonts
 PFont fontLarge;
 PFont fontSmall;
+PFont fontTiny;
 
 // screen
 final int width = 800;
@@ -33,7 +34,6 @@ final float inputAreaX = width/2-sizeOfInputArea/2;
 final float inputAreaY = height/2-sizeOfInputArea/2;
 
 // keyboard
-
 final float keyboardHeightFraction = 1;
 final float keyboardX = inputAreaX;
 final float keyboardY = inputAreaY + (1 - keyboardHeightFraction) * sizeOfInputArea;
@@ -65,21 +65,22 @@ final String[][] keyboardLayout = {
 ArrayList<ArrayList<Button>> keyboardButtons = new ArrayList<ArrayList<Button>>();
 
 // keys
-
 final float keyLabelHoriPadding = 3;
 final float keyLabelVertPadding = 10;
 final float keyLetterPadding = 4;
 ArrayList<ArrayList<HighlightedTextLabel>> keyTextLabels = new ArrayList<ArrayList<HighlightedTextLabel>>();
 
 // next button
-final int nextButtonX = 350;
-final int nextButtonY = 600;
+final int nextButtonX = (int) (inputAreaX + sizeOfInputArea/2 + 100);
+final int nextButtonY = (int) inputAreaY - 10;
 final int nextButtonWidth = 200;
 final int nextButtonHeight = 200;
 
 // intellisense module
 Intellisense intellisense;
 
+// state
+boolean justPressedSuggestion = false;
 
 void settings() {
   size(width, height);
@@ -90,6 +91,7 @@ void setup()
 {
     fontLarge = createFont("Courier New", 18);
     fontSmall = createFont("Courier New", 12);
+    fontTiny = createFont("Courier New", 8);
 
     watch = loadImage("watchhand3smaller.png");
     phrases = loadStrings("phrases2.txt"); //load the phrase set into memory
@@ -111,11 +113,13 @@ void setup()
             ButtonOnClickHandler onClick = new ButtonOnClickHandler() {
                 public void call() {
                     System.out.format("Clicked (%d, %d) \n", finalRow, finalCol);
-
+                    boolean oldJustPressedSuggestion = justPressedSuggestion;
+                    justPressedSuggestion = false;
                     if (finalRow == keyboardLayout.length - 1) {
                         // last row (special row)
                         if (finalCol == 0) {
-                            currentTyped += " ";
+                            if (!oldJustPressedSuggestion)
+                                currentTyped += " ";
                         }
                         else if (finalCol == 1) {
                             currentTyped = 
@@ -135,6 +139,7 @@ void setup()
                         currentTyped = currentTyped.trim() + " " + keyTextLabels.get(finalRow).get(finalCol).strs[0].toLowerCase();
                         currentTyped = currentTyped.trim();
                         currentTyped += " ";
+                        justPressedSuggestion = true;
                     }
                     triggerIntellisense();
                 }
@@ -166,7 +171,7 @@ void setup()
 
 void draw()
 {
-    int textX = 200;
+    int textX = 230;
 
     background(255); //clear background
     drawWatch(); //draw watch background
@@ -206,7 +211,7 @@ void draw()
         text("Phrase " + (currTrialNum+1) + " of " + totalTrialNum, textX, textY - 100); //draw the trial count
         fill(128);
         text(" Target: " + currentPhrase, textX, textY - 15); //draw the target string
-        text("Entered: " + currentTyped + (isEvenSecond ? "_" : ""), textX, textY); //draw what the user has entered thus far 
+        text("Entered: " + (justPressedSuggestion ? currentTyped.trim() : currentTyped) + (isEvenSecond ? "_" : ""), textX, textY); //draw what the user has entered thus far 
 
         //draw very basic next button
         fill(255, 0, 0);
@@ -398,7 +403,10 @@ class HighlightedTextLabel {
 
     public void draw() {
         textAlign(LEFT); 
-        textFont(fontSmall);
+        if (strs[0].length() > 8)
+            textFont(fontTiny);
+        else
+            textFont(fontSmall);
         float currX = x;
         for (int i = 0; i < strs.length; ++i) {
             fill(0, 0, 0);
