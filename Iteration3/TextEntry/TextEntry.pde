@@ -34,12 +34,21 @@ final float inputAreaY = height/2-sizeOfInputArea/2;
 
 // keyboard
 
-final float keyboardHeightFraction = 0.65;
+final float keyboardHeightFraction = 1;
 final float keyboardX = inputAreaX;
 final float keyboardY = inputAreaY + (1 - keyboardHeightFraction) * sizeOfInputArea;
 final float keyboardWidth = sizeOfInputArea;
 final float keyboardHeight = keyboardHeightFraction * sizeOfInputArea;
 final String[][] keyboardLayout = {
+    {
+        "", ""
+    },
+    {
+        "", ""
+    },
+    {
+        "", ""
+    },
     {
         "q", "w", "e", "r", "t", "y", "u", "i", "o", "p"
     },
@@ -68,6 +77,9 @@ final int nextButtonY = 600;
 final int nextButtonWidth = 200;
 final int nextButtonHeight = 200;
 
+// intellisense module
+Intellisense intellisense;
+
 
 void settings() {
   size(width, height);
@@ -81,8 +93,9 @@ void setup()
 
     watch = loadImage("watchhand3smaller.png");
     phrases = loadStrings("phrases2.txt"); //load the phrase set into memory
+    intellisense = new Intellisense(phrases);
     Collections.shuffle(Arrays.asList(phrases), new Random()); //randomize the order of the phrases with no seed
- 
+
     orientation(LANDSCAPE); //can also be PORTRAIT - sets orientation on android device
 
     // create keyboard buttons
@@ -100,17 +113,30 @@ void setup()
                     System.out.format("Clicked (%d, %d) \n", finalRow, finalCol);
 
                     if (finalRow == keyboardLayout.length - 1) {
-                        if (finalCol == 0)
+                        // last row (special row)
+                        if (finalCol == 0) {
                             currentTyped += " ";
+                        }
                         else if (finalCol == 1) {
                             currentTyped = 
                                 currentTyped.length() == 0 
                                 ? "" 
                                 : currentTyped.substring(0, currentTyped.length() - 1);
                         }
-                    } else {
-                        currentTyped += keyboardLayout[finalRow][finalCol].toLowerCase();
+                    } else if (finalRow >= 3) {
+                        // normal characters
+                        currentTyped += keyTextLabels.get(finalRow).get(finalCol).strs[0].toLowerCase();
+                    } else { 
+                        // suggestion region
+                        if (currentTyped.length() > 0 && currentTyped.charAt(currentTyped.length() - 1) != ' ') {
+                            // need to remove last word first
+                            currentTyped = currentTyped.substring(0, max(currentTyped.lastIndexOf(" "), 0));
+                        }
+                        currentTyped = currentTyped.trim() + " " + keyTextLabels.get(finalRow).get(finalCol).strs[0].toLowerCase();
+                        currentTyped = currentTyped.trim();
+                        currentTyped += " ";
                     }
+                    triggerIntellisense();
                 }
             };
             keyboardButtonsRow.add(new Button(
@@ -134,6 +160,8 @@ void setup()
         keyboardButtons.add(keyboardButtonsRow);
         keyTextLabels.add(keyTextLabelsRow);
     }
+
+    triggerIntellisense();
 }
 
 void draw()
@@ -274,6 +302,7 @@ void nextTrial()
     lastTime = millis(); //record the time of when this trial ended
     currentTyped = ""; //clear what is currently typed preparing for next trial
     currentPhrase = phrases[currTrialNum]; // load the next phrase!
+    triggerIntellisense();
     //currentPhrase = "abc"; // uncomment this to override the test phrase (useful for debugging)
 }
 
@@ -287,6 +316,22 @@ void drawWatch()
     imageMode(CENTER);
     image(watch, 0, 0);
     popMatrix();
+}
+
+void triggerIntellisense() {
+    ArrayList<String> suggestions = intellisense.getSuggestedWords(currentTyped);
+    System.out.println(currentTyped + " -> " + suggestions.toString());
+    int suggestionIndex = 0;
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < keyTextLabels.get(i).size(); ++j) {
+            if (suggestionIndex < suggestions.size()) {
+                keyTextLabels.get(i).get(j).strs = new String[] { suggestions.get(suggestionIndex) };
+                suggestionIndex++;
+            }
+            else 
+                keyTextLabels.get(i).get(j).strs = new String[] { "" };
+        }
+    }
 }
 
 //=========SHOULD NOT NEED TO TOUCH THIS METHOD AT ALL!==============
@@ -338,9 +383,9 @@ class Button {
 }
 
 class HighlightedTextLabel {
+    public String[] strs;
     float x;
     float y;
-    String[] strs;
     float padding;
     int highlightedIndex = -1;
 
@@ -366,4 +411,142 @@ class HighlightedTextLabel {
 
     public void unhighlight() { highlightedIndex = -1; }
     public void highlight(int index) { highlightedIndex = index; }
+}
+
+class Intellisense {
+    ArrayList<ArrayList<String>> dataset = new ArrayList<>();
+
+    // uses a 2 gram word model, P(X | prev word and prev prev word)
+    // maps (whitespace trimed prev word and prev prev word) to 
+    // (a map mapping (word) to (frequency))
+    // note key should be of the form "" or "prevword" or "prevword prevprevword"
+    // the first two forms are in case of not enough words
+    HashMap<String, HashMap<String, Integer>> model = new HashMap<String, HashMap<String, Integer>>();
+
+    // maps (whitespace trimed prev word and prev prev word) to a list of words x sorted by P(x | prev word and prev prev word)
+    HashMap<String, ArrayList<String>> inference = new HashMap<String, ArrayList<String>>();
+
+    HashMap<String, Integer> freqModel = new HashMap<String, Integer>();
+
+    ArrayList<String> freqInference = new ArrayList<String>();
+
+    public Intellisense(String[] sentences) {
+        // build dataset
+        for (int i = 0; i < sentences.length; ++i) {
+            ArrayList<String> currRow = new ArrayList<>();
+            String[] words = sentences[i].trim().split("\\s+");
+            for (int j = 0; j < words.length; ++j) {
+                currRow.add(words[j]);
+            }
+            dataset.add(currRow);
+        }
+
+        // build model and freqModel
+        for (int i = 0; i < dataset.size(); ++i) {
+            for (int j = 0; j < dataset.get(i).size(); ++j) {
+                // model
+                String key = getLastTwoWords(dataset.get(i), j);
+                if (!model.containsKey(key)) {
+                    model.put(key, new HashMap<String, Integer>());
+                }
+                String second_key = dataset.get(i).get(j);
+                HashMap<String, Integer> mp = model.get(key);
+                mp.put(second_key, mp.getOrDefault(second_key, 0) + 1);
+
+                // freqModel
+                freqModel.put(second_key, freqModel.getOrDefault(second_key, 0) + 1);
+            }
+        }
+        
+        // construct inference 
+        for (HashMap.Entry<String, HashMap<String, Integer>> entry : model.entrySet()) {
+            String key = entry.getKey();
+            HashMap<String, Integer> mp = entry.getValue();
+
+            ArrayList<HashMap.Entry<String, Integer>> rawList = new ArrayList<HashMap.Entry<String, Integer>>();
+            for (HashMap.Entry<String, Integer> wordEntry : mp.entrySet())
+                rawList.add(wordEntry);
+            Collections.sort(rawList, Collections.reverseOrder(HashMap.Entry.comparingByValue()));
+
+            ArrayList<String> list = new ArrayList<String>();
+            for (HashMap.Entry<String, Integer> wordEntry : rawList) 
+                list.add(wordEntry.getKey());
+
+            inference.put(key, list);
+        }
+
+        // construct freqInference
+        ArrayList<HashMap.Entry<String, Integer>> rawList = new ArrayList<HashMap.Entry<String, Integer>>();
+        for (HashMap.Entry<String, Integer> entry : freqModel.entrySet())
+            rawList.add(entry);
+        Collections.sort(rawList, Collections.reverseOrder(HashMap.Entry.comparingByValue()));
+        for (HashMap.Entry<String, Integer> entry : rawList)
+            freqInference.add(entry.getKey());
+
+        System.out.println("--------------- BEGIN SANITY TESTS (DEBUG) ---------------");
+        System.out.println("---1  " + getSuggestedWords("").toString());
+        System.out.println("---2  " + getSuggestedWords("t").toString());
+        System.out.println("---3  " + getSuggestedWords("s").toString());
+        System.out.println("---4  " + getSuggestedWords("the").toString());
+        System.out.println("---5  " + getSuggestedWords("the ").toString());
+        System.out.println("---6  " + getSuggestedWords("having is").toString());
+        System.out.println("---7  " + getSuggestedWords("are having ").toString());
+        System.out.println("---8  " + getSuggestedWords("jkafekjfk").toString());
+        System.out.println("---9  " + getSuggestedWords("jkafekjfk ").toString());
+        System.out.println("--------------- END SANITY TESTS (DEBUG) ---------------");
+    }
+
+    public ArrayList<String> getSuggestedWords(String sentence) {
+        int numSuggested = 6;
+        ArrayList<String> answer = new ArrayList<String>();
+
+        ArrayList<String> words = new ArrayList<String>();
+        Collections.addAll(words, sentence.trim().split("\\s+"));
+
+        String prefix;
+        int curr_index;
+        if (sentence.length() == 0 || sentence.substring(sentence.length() - 1).equals(" ")) {
+            // trying to get suggestion of a new word
+            prefix = "";
+            curr_index = words.size();
+        } else {
+            // trying to get suggestion of a partial word
+            prefix = words.size() > 0 ? words.get(words.size() - 1) : "";
+            curr_index = words.size() - 1;
+        }
+
+        String key = getLastTwoWords(sentence.trim(), curr_index);
+        // System.out.println(String.format("getSuggestedWords key %s, prefix %s, curr_index %d, words %s", key, prefix, curr_index, words.toString()));
+        int i = 0;
+        if (inference.containsKey(key)) {
+            while (i < min(numSuggested, inference.get(key).size())) {
+                if (inference.get(key).get(i).startsWith(prefix))
+                    answer.add(inference.get(key).get(i));
+                ++i;
+            }
+        }
+        i = answer.size();
+        for (int j = 0; i < numSuggested && j < freqInference.size(); ++j) {
+            if (freqInference.get(j).startsWith(prefix)) {
+                answer.add(freqInference.get(j));
+                ++i;
+            }
+        }
+        return answer;
+    }
+
+    private String getLastTwoWords(String s, int curr_index) {
+        ArrayList<String> words = new ArrayList<String>();
+        Collections.addAll(words, s.trim().split("\\s+"));
+        return getLastTwoWords(words, curr_index);
+    }
+
+    private String getLastTwoWords(ArrayList<String> s, int curr_index) {
+        assert curr_index <= s.size() && 0 <= curr_index;
+        if (curr_index == 0 || s.size() == 0)
+            return "";
+        if (curr_index == 1 || s.size() == 1)
+            return s.get(0).trim();
+        return s.get(curr_index - 1).trim() + " " + s.get(curr_index - 2).trim();
+    }
 }
